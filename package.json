@@ -1,0 +1,28 @@
+{
+  "name": "dcsdemo",
+  "version": "1.0.0",
+  "description": "Zero trust demo application with client-side encryption",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "start": "npm run start --workspace=server",
+    "seed": "npm run seed --workspace=server",
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui",
+    "docker:build": "docker build -t dcsdemo .",
+    "docker:run": "docker run -p 3333:3333 dcsdemo",
+    "clean": "rm -rf node_modules server/node_modules client/node_modules server/dist client/dist server/*.db",
+    "reset": "npm run clean && rm -f server/*.db && npm install && npm run seed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "concurrently": "^8.2.2"
+  }
+}
