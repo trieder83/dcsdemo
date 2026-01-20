@@ -8,6 +8,7 @@ This application demonstrates:
 - **Client-side encryption**: Data is encrypted in the browser using Web Crypto API before transmission
 - **Zero-trust architecture**: The server never sees plaintext PII data
 - **Key management**: RSA key pairs for wrapping/unwrapping AES data keys
+- **Multi-device support**: Password-derived KEK enables the same keys across devices
 - **Role-based access control**: Admin, User, and View-only roles
 
 ## Technology Stack
@@ -15,7 +16,7 @@ This application demonstrates:
 - **Frontend**: TypeScript, React, Vite
 - **Backend**: TypeScript, Node.js, Express
 - **Database**: SQLite
-- **Encryption**: Web Crypto API (RSA-OAEP 2048-bit, AES-GCM 256-bit)
+- **Encryption**: Web Crypto API (RSA-OAEP 2048-bit, AES-GCM 256-bit, PBKDF2 for KEK derivation)
 - **Deployment**: Docker
 
 ## Quick Start
@@ -115,12 +116,14 @@ npm run seed
 npm run clean
 ```
 
-### Clear Browser Keys
+### Clear Browser Session
 
-If you need to clear the cryptographic keys stored in the browser:
+If you need to clear the KEK (Key Encryption Key) stored in the browser:
 1. Open browser DevTools (F12)
 2. Go to Application > IndexedDB
 3. Delete the `dcsdemo-keys` database
+
+Note: This only clears the session KEK. Your encrypted private key remains safely stored on the server and will be decrypted again when you log in with your password.
 
 ## Project Structure
 
@@ -143,6 +146,10 @@ dcsdemo/
 │   │   ├── index.ts        # Server entry point
 │   │   └── seed.ts         # Database seeding script
 │   └── data.db             # SQLite database (created on seed)
+├── spec/                   # Security specifications
+│   ├── security-dcs-pii-encription.md   # Cryptographic algorithms & key wrapping
+│   ├── security-dcs-masking.md          # PII masking for LLM integration
+│   └── security-dcs-onboarding.md       # User onboarding & access workflows
 ├── tests/                  # Playwright e2e tests
 ├── scripts/                # Utility scripts
 ├── Dockerfile
@@ -152,11 +159,17 @@ dcsdemo/
 
 ## Security Notes
 
-- Private keys are stored in browser IndexedDB and marked as **non-extractable**
+- **KEK (Key Encryption Key)**: Derived from user password using PBKDF2-SHA256 (100,000 iterations), stored in browser IndexedDB for session persistence
+- **Private keys**: Stored on the server encrypted with the user's KEK - enables multi-device access with the same password
+- **Data keys**: AES-256 keys wrapped (encrypted) with each user's RSA public key
 - The server never receives or stores plaintext PII data
-- Data keys are wrapped (encrypted) with each user's public key
-- Password hashing uses PBKDF2-SHA256 with 100,000+ iterations
 - All data encryption uses AES-GCM with unique 12-byte IVs
+- RSA-OAEP 2048-bit keys for key wrapping operations
+
+For detailed security specifications, see the `spec/` folder:
+- [PII Encryption](spec/security-dcs-pii-encription.md) - Cryptographic algorithms, key wrapping, encrypt/decrypt workflows
+- [Masking for LLM](spec/security-dcs-masking.md) - PII masking when sending data to LLMs
+- [User Onboarding](spec/security-dcs-onboarding.md) - Seeding, first admin setup, adding new users
 
 ## Testing
 
