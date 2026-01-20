@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi } from '../utils/api';
-import { deriveKEK } from '../utils/crypto';
+import { deriveKEK, storeKEK, getStoredKEK, clearStoredKEK } from '../utils/crypto';
 
 interface User {
   id: number;
@@ -31,10 +31,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { user } = await authApi.me();
       setUser(user);
-      // Note: KEK will be null on page refresh - user needs to re-login for crypto
-      // This is a security feature - KEK is only in memory during active session
+
+      // Try to restore KEK from IndexedDB (survives page refresh)
+      if (user && user.username !== 'seed') {
+        const storedKek = await getStoredKEK();
+        if (storedKek) {
+          setKek(storedKek);
+        }
+      }
     } catch {
       setUser(null);
+      // Clear any stale KEK
+      await clearStoredKEK().catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -45,17 +53,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(user);
 
     // Derive KEK from password (using username as salt)
-    // KEK is stored in memory only - never persisted
     if (username !== 'seed') {
       const derivedKek = await deriveKEK(password, `dcsdemo-kek-${username}`);
       setKek(derivedKek);
+      // Store KEK in IndexedDB for session persistence (survives page refresh)
+      await storeKEK(derivedKek);
     }
   }
 
   async function logout() {
     await authApi.logout();
     setUser(null);
-    setKek(null); // Clear KEK on logout
+    setKek(null);
+    // Clear KEK from IndexedDB on logout
+    await clearStoredKEK().catch(() => {});
   }
 
   return (

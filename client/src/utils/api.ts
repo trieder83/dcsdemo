@@ -63,15 +63,31 @@ export const usersApi = {
     })
 };
 
-// Data API
+// Weight Data API
+export interface WeightRecord {
+  id: number;
+  member_id: number;
+  weight: number;
+  date: string;
+  deleted: string | null;
+  created_at: string;
+  member_name: string | null;
+  member_surname: string | null;
+}
+
 export const dataApi = {
   list: () =>
-    request<Array<{ id: number; key: string; value: string; created_at: string }>>('/data'),
+    request<WeightRecord[]>('/data'),
 
-  create: (key: string, value: string) =>
+  create: (memberId: number, weight: number, date: string) =>
     request<{ message: string; id: number }>('/data', {
       method: 'POST',
-      body: JSON.stringify({ key, value })
+      body: JSON.stringify({ memberId, weight, date })
+    }),
+
+  delete: (id: number) =>
+    request<{ message: string; deletedAt: string }>(`/data/${id}`, {
+      method: 'DELETE'
     })
 };
 
@@ -118,5 +134,86 @@ export const keysApi = {
   reset: (userId: number) =>
     request<{ message: string }>(`/keys/reset/${userId}`, {
       method: 'DELETE'
+    })
+};
+
+// Audit API
+export interface AuditLog {
+  id: number;
+  action: string;
+  user_id: number | null;
+  target_user_id: number | null;
+  details: string | null;
+  ip_address: string | null;
+  success: number;
+  created_at: string;
+  actor_username: string | null;
+  target_username: string | null;
+}
+
+export const auditApi = {
+  list: (params?: { limit?: number; offset?: number; action?: string; userId?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+    if (params?.offset) searchParams.set('offset', params.offset.toString());
+    if (params?.action) searchParams.set('action', params.action);
+    if (params?.userId) searchParams.set('userId', params.userId.toString());
+    const query = searchParams.toString();
+    return request<{ logs: AuditLog[]; total: number; limit: number; offset: number }>(
+      `/audit${query ? `?${query}` : ''}`
+    );
+  },
+
+  getActions: () => request<string[]>('/audit/actions')
+};
+
+// Members API
+export interface Member {
+  id: number;
+  name: string | null;
+  surname: string | null;
+  birthdate: string | null;
+  email: string | null;
+  gender: string | null;
+  deleted: string | null;
+  created_at: string;
+}
+
+export const membersApi = {
+  list: () => request<Member[]>('/members'),
+
+  create: (data: { name?: string; surname?: string; birthdate?: string; email?: string; gender?: string }) =>
+    request<{ message: string; id: number }>('/members', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  delete: (id: number) =>
+    request<{ message: string; deletedAt: string }>(`/members/${id}`, {
+      method: 'DELETE'
+    })
+};
+
+// LLM API
+export interface LlmSettings {
+  provider: string;
+  endpoint: string;
+  hasApiKey: boolean;
+  encryptedApiKey?: string;
+}
+
+export const llmApi = {
+  getSettings: () => request<LlmSettings>('/llm/settings'),
+
+  updateSettings: (data: { provider?: string; endpoint?: string; encryptedApiKey: string }) =>
+    request<{ message: string }>('/llm/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  logAsk: (dataType: string, recordId: number) =>
+    request<{ message: string }>('/llm/ask/log', {
+      method: 'POST',
+      body: JSON.stringify({ dataType, recordId })
     })
 };

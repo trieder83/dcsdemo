@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { usersApi, keysApi } from '../utils/api';
+import { usersApi, keysApi, auditApi, AuditLog } from '../utils/api';
 import { useCrypto } from '../context/CryptoContext';
 
 interface User {
@@ -23,13 +23,25 @@ interface Role {
   name: string;
 }
 
+type AdminTab = 'users' | 'audit';
+
 export default function Admin() {
   const { encrypt, wrapKeyForUser, hasDataKey } = useCrypto();
+  const [activeTab, setActiveTab] = useState<AdminTab>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [userKeys, setUserKeys] = useState<Record<number, UserKeyInfo>>({});
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionStatus, setActionStatus] = useState<Record<number, string>>({});
+
+  // Audit state
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(0);
+  const [auditActions, setAuditActions] = useState<string[]>([]);
+  const [filterAction, setFilterAction] = useState<string>('');
+  const AUDIT_PAGE_SIZE = 25;
 
   // New user form
   const [username, setUsername] = useState('');
@@ -46,6 +58,39 @@ export default function Admin() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      loadAuditLogs();
+      loadAuditActions();
+    }
+  }, [activeTab, auditPage, filterAction]);
+
+  async function loadAuditLogs() {
+    setAuditLoading(true);
+    try {
+      const result = await auditApi.list({
+        limit: AUDIT_PAGE_SIZE,
+        offset: auditPage * AUDIT_PAGE_SIZE,
+        action: filterAction || undefined
+      });
+      setAuditLogs(result.logs);
+      setAuditTotal(result.total);
+    } catch (error) {
+      console.error('Error loading audit logs:', error);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  async function loadAuditActions() {
+    try {
+      const actions = await auditApi.getActions();
+      setAuditActions(actions);
+    } catch (error) {
+      console.error('Error loading audit actions:', error);
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -184,18 +229,69 @@ export default function Admin() {
     return keyInfo?.hasPublicKey && !keyInfo?.hasWrappedKey && u.username !== 'seed';
   });
 
+  function getActionBadge(action: string) {
+    const colors: Record<string, string> = {
+      'LOGIN': '#28a745',
+      'LOGIN_FAILED': '#dc3545',
+      'LOGOUT': '#6c757d',
+      'PASSWORD_CHANGE': '#17a2b8',
+      'USER_CREATE': '#007bff',
+      'USER_UPDATE': '#007bff',
+      'USER_DEACTIVATE': '#ffc107',
+      'KEY_SETUP': '#6f42c1',
+      'KEY_RESET': '#fd7e14',
+      'ACCESS_GRANT': '#20c997',
+      'WEIGHT_CREATE': '#e83e8c',
+      'WEIGHT_DELETE': '#dc3545',
+      'MEMBER_CREATE': '#17a2b8',
+      'MEMBER_DELETE': '#dc3545'
+    };
+    return (
+      <span style={{
+        backgroundColor: colors[action] || '#6c757d',
+        color: '#fff',
+        padding: '2px 8px',
+        borderRadius: 4,
+        fontSize: 11,
+        fontWeight: 500
+      }}>
+        {action}
+      </span>
+    );
+  }
+
+  const totalAuditPages = Math.ceil(auditTotal / AUDIT_PAGE_SIZE);
+
   return (
     <div>
       <div className="card">
-        <h2 style={{ marginBottom: 20 }}>Admin - User Management</h2>
-
-        {!hasDataKey && (
-          <div className="error" style={{ marginBottom: 20 }}>
-            Warning: You don't have a data key. You cannot grant access to other users.
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h2>Admin Panel</h2>
+          <div className="tabs">
+            <button
+              className={`tab ${activeTab === 'users' ? 'active' : ''}`}
+              onClick={() => setActiveTab('users')}
+            >
+              Users
+            </button>
+            <button
+              className={`tab ${activeTab === 'audit' ? 'active' : ''}`}
+              onClick={() => setActiveTab('audit')}
+            >
+              Audit Log
+            </button>
           </div>
-        )}
+        </div>
 
-        {/* Pending Access Requests - Prominent Section */}
+        {activeTab === 'users' && (
+          <>
+            {!hasDataKey && (
+              <div className="error" style={{ marginBottom: 20 }}>
+                Warning: You don't have a data key. You cannot grant access to other users.
+              </div>
+            )}
+
+            {/* Pending Access Requests - Prominent Section */}
         {pendingAccessUsers.length > 0 && (
           <div style={{
             backgroundColor: '#fff3cd',
@@ -374,6 +470,116 @@ export default function Admin() {
               ))}
             </tbody>
           </table>
+        )}
+          </>
+        )}
+
+        {activeTab === 'audit' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  Filter:
+                  <select
+                    className="input"
+                    value={filterAction}
+                    onChange={(e) => { setFilterAction(e.target.value); setAuditPage(0); }}
+                    style={{ width: 180 }}
+                  >
+                    <option value="">All Actions</option>
+                    {auditActions.map(action => (
+                      <option key={action} value={action}>{action}</option>
+                    ))}
+                  </select>
+                </label>
+                <span style={{ color: '#666', fontSize: 13 }}>
+                  {auditTotal} total entries
+                </span>
+              </div>
+              <button
+                className="btn"
+                onClick={() => loadAuditLogs()}
+                disabled={auditLoading}
+                style={{ padding: '5px 15px', fontSize: 13 }}
+              >
+                {auditLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+
+            {auditLoading ? (
+              <p>Loading...</p>
+            ) : (
+              <>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>User</th>
+                      <th>Target</th>
+                      <th>Details</th>
+                      <th>IP</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map(log => (
+                      <tr key={log.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                          {new Date(log.created_at).toLocaleString()}
+                        </td>
+                        <td>{getActionBadge(log.action)}</td>
+                        <td>{log.actor_username || '-'}</td>
+                        <td>{log.target_username || '-'}</td>
+                        <td style={{ fontSize: 12, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {log.details || '-'}
+                        </td>
+                        <td style={{ fontSize: 11, color: '#666' }}>{log.ip_address || '-'}</td>
+                        <td>
+                          {log.success ? (
+                            <span style={{ color: '#28a745' }}>OK</span>
+                          ) : (
+                            <span style={{ color: '#dc3545' }}>Failed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {auditLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', color: '#666' }}>
+                          No audit logs found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {totalAuditPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 15, marginTop: 20 }}>
+                    <button
+                      className="btn"
+                      onClick={() => setAuditPage(p => Math.max(0, p - 1))}
+                      disabled={auditPage === 0}
+                      style={{ padding: '5px 15px' }}
+                    >
+                      Previous
+                    </button>
+                    <span style={{ color: '#666' }}>
+                      Page {auditPage + 1} of {totalAuditPages}
+                    </span>
+                    <button
+                      className="btn"
+                      onClick={() => setAuditPage(p => Math.min(totalAuditPages - 1, p + 1))}
+                      disabled={auditPage >= totalAuditPages - 1}
+                      style={{ padding: '5px 15px' }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
     </div>

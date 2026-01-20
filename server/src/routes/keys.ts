@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db } from '../models/database.js';
+import { db, logAudit } from '../models/database.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -52,6 +52,16 @@ router.post('/grant', requireAuth, requireAdmin, (req, res) => {
     db.prepare('UPDATE key_management SET wrapped_data_key = ? WHERE user_id = ?')
       .run(wrappedDataKey, userId);
 
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    logAudit({
+      action: 'ACCESS_GRANT',
+      userId: req.session.userId,
+      targetUserId: userId,
+      details: `Admin granted data access to user ${userId}`,
+      ipAddress,
+      success: true
+    });
+
     res.json({ message: 'Access granted' });
   } catch (error) {
     console.error('Grant access error:', error);
@@ -93,12 +103,22 @@ router.delete('/reset/:userId', requireAuth, requireAdmin, (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Clear the user's public key and wrapped data key
+    // Clear the user's public key, encrypted private key, and wrapped data key
     db.prepare(`
       UPDATE key_management
-      SET public_key = '', wrapped_data_key = ''
+      SET public_key = '', encrypted_private_key = '', wrapped_data_key = ''
       WHERE user_id = ?
     `).run(userId);
+
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    logAudit({
+      action: 'KEY_RESET',
+      userId: req.session.userId,
+      targetUserId: Number(userId),
+      details: `Admin reset keys for user ${userId}`,
+      ipAddress,
+      success: true
+    });
 
     res.json({ message: 'User keys reset. User must set up keys again.' });
   } catch (error) {
@@ -156,6 +176,15 @@ router.put('/setup', requireAuth, (req, res) => {
         WHERE user_id = ?
       `).run(publicKey, encryptedPrivateKey, userId);
     }
+
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    logAudit({
+      action: 'KEY_SETUP',
+      userId,
+      details: `User ${req.session.username} set up encryption keys${wrappedDataKey ? ' with data key' : ''}`,
+      ipAddress,
+      success: true
+    });
 
     res.json({ message: 'Keys set up successfully', existing: false });
   } catch (error) {

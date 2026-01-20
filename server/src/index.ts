@@ -7,6 +7,9 @@ import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import dataRoutes from './routes/data.js';
 import keysRoutes from './routes/keys.js';
+import auditRoutes from './routes/audit.js';
+import membersRoutes from './routes/members.js';
+import llmRoutes from './routes/llm.js';
 
 const app = express();
 // In dev mode, use 3334 (Vite runs on 3333 and proxies /api to 3334)
@@ -38,6 +41,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/keys', keysRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/members', membersRoutes);
+app.use('/api/llm', llmRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

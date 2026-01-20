@@ -27,6 +27,7 @@ interface CryptoContextType {
   decrypt: (encryptedData: string) => Promise<string>;
   wrapKeyForUser: (userPublicKey: string) => Promise<string>;
   clearKeys: () => Promise<void>;
+  reloadKeys: () => Promise<void>;
 }
 
 const CryptoContext = createContext<CryptoContextType | null>(null);
@@ -43,6 +44,22 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadKeys();
   }, [user, kek]);
+
+  // Auto-refresh every 10 seconds when waiting for access (has keys but no data key)
+  useEffect(() => {
+    if (!user || user.username === 'seed' || needsKeySetup || needsRelogin || loading) {
+      return;
+    }
+
+    // If we have keys but no data key, poll for updates
+    if (keyPair && !dataKey) {
+      const interval = setInterval(() => {
+        loadKeys();
+      }, 10000); // 10 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [user, keyPair, dataKey, needsKeySetup, needsRelogin, loading]);
 
   async function loadKeys() {
     if (!user) {
@@ -212,6 +229,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
     setNeedsKeySetup(false);
   }
 
+  async function reloadKeys(): Promise<void> {
+    await loadKeys();
+  }
+
   return (
     <CryptoContext.Provider
       value={{
@@ -224,7 +245,8 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
         encrypt,
         decrypt,
         wrapKeyForUser,
-        clearKeys
+        clearKeys,
+        reloadKeys
       }}
     >
       {children}

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { CryptoProvider } from './context/CryptoContext';
+import { LlmProvider } from './context/LlmContext';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <AuthProvider>
         <CryptoProvider>
-          <App />
+          <LlmProvider>
+            <App />
+          </LlmProvider>
         </CryptoProvider>
       </AuthProvider>
     </BrowserRouter>

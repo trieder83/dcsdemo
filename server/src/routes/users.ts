@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db } from '../models/database.js';
+import { db, logAudit } from '../models/database.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { hashPassword } from '../utils/crypto.js';
 
@@ -49,6 +49,16 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       INSERT INTO key_management (user_id, role_id, public_key)
       VALUES (?, ?, ?)
     `).run(userId, role.id, publicKey || '');
+
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    logAudit({
+      action: 'USER_CREATE',
+      userId: req.session.userId,
+      targetUserId: userId as number,
+      details: `Created user ${username} with role ${roleId || 'view-role'}`,
+      ipAddress,
+      success: true
+    });
 
     res.status(201).json({
       message: 'User created',
